@@ -2314,29 +2314,29 @@ class Transaction(object):
             raise ValidationError(
                 "ADV transaction must be against a commited CREATE transaction"
             )
-        ## uncomment in not shacl
-        #complex
-        # adv_list = bigchain.get_adv_txids_for_asset(create_tx_id)
         
-        # if adv_list:
-        #     raise DuplicateTransaction(
-        #         "ADV tx with the same asset input `{}` already committed".format(
-        #             adv_list
-        #         )
-        #     )
-        ##end uncomment
-        ##This part should comment if not shacl
-        #start_time = time.time()
-        
-        if self.id in shacl_validator.validated_transactions: #not optimized
+        owener_pubkey = create_tx['outputs'][0]['public_keys']
+
+        adv_sender_keys = create_tx['inputs'][0]['owners_before'][0]
+
+        if adv_sender_keys not in owener_pubkey:
+            raise ValidationError("Only the asset owner may advertise")
+
+
+        current_state = json.dumps(create_tx, sort_keys=True)
+        current_hash = hash(current_state)
+
+        last_hash = shacl_validator.asset_state_hash.get(self.id)
+
+        # Nothing changed, so skip shacl
+        if last_hash is not None and current_hash == last_hash:
+            return
             
-            return  
         json_data_adv1 = {
             "asset_id": self.asset["data"]["asset_id"],
             "transaction_id": self.id,
             "operation": self.operation,
             "status":self.metadata["status"]
-            
         }
 
         
@@ -2344,13 +2344,11 @@ class Transaction(object):
         
         if not validation_result: 
             raise ValidationError(
-                    "SELL transaction'Validation failed"
-                )
-        
-        # end_time = time.time()
-        # logging.info(f"Time taken to validate adv: {end_time - start_time} seconds")
-        # logger.debug(f"Time taken to validate adv: {end_time - start_time} seconds")
-        ##end
+                "SELL transaction'Validation failed"
+            )
+
+        # if validated
+        shacl_validator.asset_state_hash[self.id] = current_hash
             
     def validate_update_adv(self, bigchain, current_transactions=[]):
         
